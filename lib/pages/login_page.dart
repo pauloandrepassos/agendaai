@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // Importar url_launcher
-import '../services/auth_service.dart';
-import 'admin_home_page.dart';
-import 'cliente_home_page.dart';
-import 'gerente_home_page.dart';
-import 'package:agendaai/widgets/app_bar.dart'; // Importando o CustomAppBar
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -12,201 +11,173 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  String? _errorMessage;
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+  bool isLoading = false;
+  bool showPassword = false;
 
-  Future<void> _login() async {
-    final String email = _emailController.text;
-    final String password = _passwordController.text;
+  Future<void> login() async {
+    final String email = emailController.text.trim();
+    final String password = passwordController.text.trim();
 
-    AuthService authService = AuthService();
+    if (email.isEmpty || password.isEmpty) {
+      showError('Por favor, preencha todos os campos.');
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
 
     try {
-      await authService.login(email, password);
-      String? papel = await authService.getPapel();
-      
-      if (papel == null) {
-        setState(() {
-          _errorMessage = "Erro ao obter o papel do usuário.";
-        });
-        return;
-      }
+      final response = await http.post(
+        Uri.parse('https://api-agendaai.vercel.app/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'email': email, 'password': password}),
+      );
 
-      if (papel == 'admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => AdminHomePage()),
-        );
-      } else if (papel == 'cliente') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => ClienteHomePage()),
-        );
-      } else if (papel == 'gerente') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => GerenteHomePage()),
-        );
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        final String token = data['token'];
+        final String papel = data['papel'];
+
+        if (papel == 'cliente') {
+          // Salva o token apenas se o papel for 'cliente'
+          SharedPreferences prefs = await SharedPreferences.getInstance();
+          await prefs.setString('token', token);
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => HomePage()),
+          );
+        } else {
+          // Redireciona para o site se o papel for diferente de 'cliente'
+          await launchUrl(Uri.parse('https://agendaai.vercel.app/auth/login')); // Altere para o site desejado
+        }
+      } else {
+        showError(data['error']);
       }
-    } catch (error) {
+    } catch (e) {
+      showError('Erro ao conectar com o servidor.');
+    } finally {
       setState(() {
-        _errorMessage = error.toString();
+        isLoading = false;
       });
     }
   }
 
-  Future<void> _launchURL() async {
-    const url = 'https://agendaai.vercel.app/auth/signup'; // Substitua pela URL real
-    if (await canLaunch(url)) {
-      await launch(url);
-    } else {
-      throw 'Não foi possível abrir o link: $url';
-    }
+  void showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: CustomAppBar(title: 'Login', showLogout: false,),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFFFA680F), // #FA680F
-              Color(0xFFFA240F), // #FA240F
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Card(
-              color: Color(0XFFFDF1CF),
-              elevation: 5,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+      backgroundColor: Color(0xFFFDF1CF),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Logo
+              Image.asset(
+                'assets/logo-agendaai.png', // Substitua com o caminho correto da sua imagem
+                height: 100,
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Login',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFFA240F),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _emailController,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Color(0xFFfdf6e3),
-                        labelText: 'Email',
-                        labelStyle: TextStyle(color: Color(0xFFFA240F)),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide(
-                            color: Color(0xFFFA240F),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide(
-                            color: Color(0xFFFA240F),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide(
-                            color: Color(0xFFFA240F),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Color(0xFFfdf6e3),
-                        labelText: 'Senha',
-                        labelStyle: TextStyle(color: Color(0xFFFA240F)),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide(
-                            color: Color(0xFFFA240F),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide(
-                            color: Color(0xFFFA240F),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(20)),
-                          borderSide: BorderSide(
-                            color: Color(0xFFFA240F),
-                          ),
-                        ),
-                        suffixIcon:
-                            Icon(Icons.visibility, color: Color(0xFFFA240F)),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-                    GestureDetector(
-                      onTap: _launchURL,
-                      child: Center(
-                        child: Text(
-                          'Ainda não possui cadastro? Cadastre-se já em nosso site',
-                          style: TextStyle(
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _login,
-                      child: Text(
-                        'Entrar',
-                        style: TextStyle(color: Color(0xFFfdf6e3)),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                        textStyle: TextStyle(fontSize: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        backgroundColor: Color(0xFFFA240F),
-                      ),
-                    ),
-                    if (_errorMessage != null) ...[
-                      SizedBox(height: 16),
-                      Text(
-                        _errorMessage!,
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    ],
-                  ],
+              SizedBox(height: 10),
+              Text(
+                'Login',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                  fontFamily: 'Roboto', // Customize conforme necessário
                 ),
               ),
-            ),
+              SizedBox(height: 30),
+              // Campo de Email
+              TextField(
+                controller: emailController,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white,
+                  labelText: 'Email',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+              SizedBox(height: 20),
+              // Campo de Senha
+              TextField(
+                controller: passwordController,
+                obscureText: !showPassword,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white,
+                  labelText: 'Senha',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      showPassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        showPassword = !showPassword;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(height: 30),
+              // Botão Entrar
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    backgroundColor: Color(0xFFFA240F), // Cor do botão
+                    textStyle: TextStyle(fontSize: 18),
+                  ),
+                  onPressed: isLoading ? null : login,
+                  child: isLoading
+                      ? CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        )
+                      : Text(
+                          'Entrar',
+                          style: TextStyle(color: Color(0xFFfdf6e3)),
+                        ),
+                ),
+              ),
+              SizedBox(height: 20),
+              // Link para Cadastro
+              TextButton(
+                onPressed: () {
+                  // Ação de cadastro
+                },
+                child: Text(
+                  'Não possui conta ainda? Cadastre-se aqui',
+                  style: TextStyle(
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 }
-
-

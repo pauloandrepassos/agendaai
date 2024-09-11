@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_bar.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final double height;
-  final bool showLogout; // Novo parâmetro para controle do ícone de logout
+  final bool showLogout; // Controle do ícone de logout
 
   CustomAppBar({
     required this.title,
@@ -31,21 +32,40 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
             border: Border(bottom: BorderSide(width: 1, color: Colors.white)),
           ),
         ),
-        backgroundColor: Colors.transparent, // Transparente para mostrar o gradiente
+        backgroundColor:
+            Colors.transparent, // Transparente para mostrar o gradiente
         elevation: 0,
-        actions: showLogout
-            ? [
-                IconButton(
-                  icon: Icon(Icons.logout, color: Colors.white),
-                  onPressed: () async {
-                    // Chama o método de logout e redireciona para a página de login
-                    AuthService authService = AuthService();
-                    await authService.logout();
-                    Navigator.pushReplacementNamed(context, '/login');
-                  },
-                ),
-              ]
-            : [], // Não exibe o ícone se showLogout for false
+        actions: [
+          if (showLogout)
+            IconButton(
+              icon: Icon(Icons.logout, color: Colors.white),
+              onPressed: () async {
+                // Chama o método de logout e redireciona para a página de login
+                AuthService authService = AuthService();
+                await authService.logout();
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+            ),
+          if (showLogout)
+            PopupMenuButton<String>(
+              icon: Icon(Icons.menu, color: Colors.white),
+              onSelected: (String value) {
+                switch (value) {
+                  case 'Bateria':
+                    Navigator.pushNamed(context, '/battery');
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) {
+                return [
+                  PopupMenuItem<String>(
+                    value: 'Bateria',
+                    child: Text('Bateria'),
+                  ),
+                ];
+              },
+            ),
+        ],
       ),
     );
   }

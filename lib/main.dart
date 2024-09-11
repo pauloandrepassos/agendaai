@@ -1,63 +1,104 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './services/auth_service.dart';
-import './pages/login_page.dart';
-import './pages/admin_home_page.dart';
-import './pages/cliente_home_page.dart';
-import './pages/gerente_home_page.dart';
+import 'package:jwt_decode/jwt_decode.dart'; // Adicione essa dependência no pubspec.yaml
+import 'pages/login_page.dart';
+import 'pages/home_page.dart';
 
-void main() {
-  runApp(MyApp());
-}
+void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Agenda AI',
-      theme: ThemeData(
-        primarySwatch: Colors.orange,
-      ),
-      //initialRoute: '/login',
-      routes: {
-        '/login': (context) => LoginPage(),
-        '/admin_home': (context) => AdminHomePage(),
-        '/cliente_home': (context) => ClienteHomePage(),
-        '/gerente_home': (context) => GerenteHomePage(),
-      },
-      home: FutureBuilder(
-        future: _checkAuth(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return CircularProgressIndicator();
-          } else if (snapshot.hasData) {
-            String? papel = snapshot.data as String?;
-            
-            if (papel == null) {
-              return LoginPage();
-            }
-
-            if (papel == 'admin') {
-              return AdminHomePage();
-            } else if (papel == 'cliente') {
-              return ClienteHomePage();
-            } else {
-              return GerenteHomePage();
-            }
-          } else {
-            return LoginPage();
-          }
-        },
-      ),
+      title: 'Login App',
+      theme: ThemeData(primarySwatch: Colors.red),
+      home: SplashScreen(),
+      navigatorObservers: [TokenObserver()], // Adiciona o observer para verificar o token
     );
   }
+}
 
-  Future<String?> _checkAuth() async {
-    AuthService authService = AuthService();
-    bool isAuthenticated = await authService.isAuthenticated();
-    if (isAuthenticated) {
-      return await authService.getPapel();
+class SplashScreen extends StatefulWidget {
+  @override
+  _SplashScreenState createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    checkLoginStatus();
+  }
+
+  Future<void> checkLoginStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('token');
+
+    if (token != null && !isTokenExpired(token)) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
+    } else {
+      await prefs.remove('token');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginPage()),
+      );
     }
-    return null;
+  }
+
+  bool isTokenExpired(String token) {
+    // Verifica se o token está expirado
+    Map<String, dynamic> payload = Jwt.parseJwt(token);
+    int exp = payload['exp'] * 1000; // Conversão para milissegundos
+    return DateTime.now().millisecondsSinceEpoch > exp;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+// TokenObserver é um NavigatorObserver para verificar o token em cada navegação
+class TokenObserver extends NavigatorObserver {
+  @override
+  void didPush(Route route, Route? previousRoute) async {
+    await checkToken();
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) async {
+    await checkToken();
+    super.didPop(route, previousRoute);
+  }
+
+  Future<void> checkToken() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('token');
+
+    if (token != null && isTokenExpired(token)) {
+      await prefs.remove('token');
+      // Recarrega para garantir que o usuário vá para a tela de login
+      Navigator.of(navigator!.context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+
+  bool isTokenExpired(String token) {
+    try {
+      Map<String, dynamic> payload = Jwt.parseJwt(token);
+      int exp = payload['exp'] * 1000; // Conversão para milissegundos
+      return DateTime.now().millisecondsSinceEpoch > exp;
+    } catch (e) {
+      // Caso ocorra erro na verificação, considera o token como expirado
+      return true;
+    }
   }
 }
